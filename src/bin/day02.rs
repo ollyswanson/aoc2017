@@ -1,7 +1,7 @@
-use aoc2017::day01::{part_1, part_2};
+use aoc2017::day02::{part_1, part_2};
 
 fn main() -> anyhow::Result<()> {
-    let input = include_str!("../../inputs/day01.txt").trim();
+    let input = include_str!("../../inputs/day02.txt");
 
     let part_1 = part_1(input);
     println!("Part 1: {}", part_1);

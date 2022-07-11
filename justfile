@@ -3,12 +3,15 @@ set dotenv-load
 _default:
 	just --list
 
-add day: (fetch day)
-	./add_day.sh {{day}}
+add DAY: (fetch DAY)
+	./add_day.sh {{DAY}}
 
-run day:
-	cargo run -r --bin {{day}}
+run DAY:
+	cargo run -r --bin day`printf "%02d" {{DAY}}`
 
-fetch day:
-	curl 'https://adventofcode.com/2017/day/{{day}}/input' \
-		-H "cookie: session=$SESSION_TOKEN" -o "inputs/day`printf "%02d" {{day}}`.txt"
+fetch DAY:
+	curl 'https://adventofcode.com/2017/day/{{DAY}}/input' \
+		-H "cookie: session=$SESSION_TOKEN" -o "inputs/day`printf "%02d" {{DAY}}`.txt"
+
+test DAY:
+	cargo test day`printf "%02d" {{DAY}}`

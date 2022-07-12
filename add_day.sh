@@ -5,8 +5,6 @@ fi
 
 day=day$(printf "%02d" "$1")
 
-touch ./inputs/"${day}".txt
-
 binary=./src/bin/"${day}".rs
 
 if ! [[ -f "$binary" ]] ; then

@@ -3,7 +3,6 @@ set dotenv-load
 _default:
 	just --list
 
-
 # Fetches the input and creates the project files for a given `DAY`
 add DAY: (_fetch DAY)
 	./add_day.sh {{DAY}}

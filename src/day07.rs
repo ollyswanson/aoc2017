@@ -1,74 +1,86 @@
 use chumsky::prelude::*;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
-pub fn part_1(input: &str) -> String {
-    let input = Input::from(input);
-    let tree = ProgramTree::build_tree(input);
-
-    tree.find_root().to_owned()
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct ProgramTree {
-    /// The index of an element in `program_names` is equal to the index of its entry in `tree`.
-    program_names: Vec<String>,
-    /// Each element in the vec holds the index of its parent, at the root of the tree the index
-    /// points to itself.
-    tree: Vec<usize>,
+pub struct ProgramTree {
+    pub root: String,
+    tree: HashMap<String, Vec<String>>,
+    weights: HashMap<String, u32>,
 }
 
 impl ProgramTree {
-    fn build_tree(input: Input) -> Self {
-        let len = input.0.len();
-        let mut program_tree = ProgramTree {
-            program_names: Vec::with_capacity(len),
-            tree: Vec::with_capacity(len),
-        };
-        let mut seen_at: HashMap<&str, usize> = HashMap::new();
-        let mut index = 0;
+    pub fn build_tree(input: &str) -> Self {
+        let input = Input::from(input);
+        let mut has_parent: HashSet<String> = HashSet::new();
+        let mut tree = HashMap::with_capacity(input.0.len());
+        let mut weights = HashMap::with_capacity(input.0.len());
 
         for InputRow {
-            parent, children, ..
-        } in input.0.iter()
+            parent,
+            weight,
+            children,
+        } in input.0
         {
-            let parent_pos = match seen_at.entry(parent) {
-                Entry::Occupied(e) => *e.get(),
-                Entry::Vacant(e) => {
-                    e.insert(index); // Populate seen_at with the index of the name
-                    program_tree.program_names.push(parent.to_owned());
-                    program_tree.tree.push(index); // Insert into program tree setting the node's parent to self
-                    let tmp = index;
-                    index += 1;
-                    tmp
-                }
-            };
+            weights.insert(parent.clone(), weight);
+            tree.insert(parent.clone(), Vec::new());
 
-            for child in children.iter() {
-                match seen_at.entry(child) {
-                    Entry::Occupied(e) => program_tree.tree[*e.get()] = parent_pos,
-                    Entry::Vacant(e) => {
-                        e.insert(index);
-                        program_tree.program_names.push(child.to_owned());
-                        program_tree.tree.push(parent_pos);
-                        index += 1;
-                    }
-                };
+            if let Some(children) = children {
+                let c = tree.get_mut(&parent).unwrap();
+                for child in children {
+                    has_parent.insert(child.clone());
+                    c.push(child);
+                }
             }
         }
 
-        program_tree
+        let all_nodes: HashSet<String> = tree.keys().cloned().collect();
+        let root = all_nodes.difference(&has_parent).next().unwrap().clone();
+
+        ProgramTree {
+            root,
+            tree,
+            weights,
+        }
     }
 
-    fn find_root(&self) -> &str {
-        let index = self
-            .tree
+    /// Returns Ok(branch_weight) or Err(required_node_weight) if the children are unbalanced.
+    pub fn find_branch_weight(&self, node: &str) -> Result<u32, u32> {
+        let children_weights: Vec<u32> = self.tree[node]
             .iter()
-            .enumerate()
-            .find(|(i, parent)| i == *parent)
-            .unwrap();
+            .map(|child| self.find_branch_weight(child))
+            .collect::<Result<_, _>>()?;
 
-        &self.program_names[index.0]
+        let mut occurences: HashMap<u32, u32> = HashMap::new();
+
+        for weight in children_weights.iter() {
+            let count = occurences.entry(*weight).or_insert(0);
+            *count += 1;
+        }
+
+        if occurences.len() > 1 {
+            // There will only be 1 unbalanced weight, as specified by the problem
+            let unbalanced_weight = occurences.into_iter().find(|(_, v)| *v == 1).unwrap().0;
+            let desired_weight = *children_weights
+                .iter()
+                .find(|&&w| w != unbalanced_weight)
+                .unwrap();
+
+            let delta = desired_weight as i32 - unbalanced_weight as i32;
+
+            let index = children_weights
+                .iter()
+                .enumerate()
+                .find(|&(_, &w)| w == unbalanced_weight)
+                .unwrap()
+                .0;
+
+            let child = &self.tree[node][index];
+            let child_weight = self.weights[child];
+
+            return Err((child_weight as i32 + delta as i32) as u32);
+        }
+
+        Ok(self.weights[node] + children_weights.iter().sum::<u32>())
     }
 }
 
@@ -76,7 +88,7 @@ impl ProgramTree {
 struct InputRow {
     parent: String,
     weight: u32,
-    children: Vec<String>,
+    children: Option<Vec<String>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -113,7 +125,7 @@ fn parse_row(input: &str) -> InputRow {
         .map(|((parent, weight), children)| InputRow {
             parent,
             weight,
-            children: children.unwrap_or_default(),
+            children,
         });
 
     row.parse(input).unwrap()
@@ -124,52 +136,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_tree_works() {
-        let input: Input = Input(vec![
-            InputRow {
-                parent: "a".to_owned(),
-                weight: 2,
-                children: vec![],
-            },
-            InputRow {
-                parent: "b".to_owned(),
-                weight: 2,
-                children: vec![],
-            },
-            InputRow {
-                parent: "c".to_owned(),
-                weight: 2,
-                children: vec![],
-            },
-            InputRow {
-                parent: "d".to_owned(),
-                weight: 6,
-                children: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
-            },
-        ]);
-
-        let expected = ProgramTree {
-            program_names: vec![
-                "a".to_owned(),
-                "b".to_owned(),
-                "c".to_owned(),
-                "d".to_owned(),
-            ],
-            tree: vec![3, 3, 3, 3],
-        };
-
-        let program_tree = ProgramTree::build_tree(input);
-
-        assert_eq!(expected, program_tree);
-    }
-
-    #[test]
     fn parse_row_works() {
         let input = "a (1) -> b, c";
         let expected = InputRow {
             parent: "a".to_owned(),
             weight: 1,
-            children: vec!["b".to_owned(), "c".to_owned()],
+            children: Some(vec!["b".to_owned(), "c".to_owned()]),
         };
 
         let row = parse_row(input);
@@ -194,9 +166,31 @@ mod tests {
             cntj (57)";
         let expected = "tknk";
 
-        let input = Input::from(input);
         let tree = ProgramTree::build_tree(input);
 
-        assert_eq!(expected, tree.find_root());
+        assert_eq!(expected, &tree.root);
+    }
+
+    #[test]
+    fn find_unbalanced_node_works() {
+        let input = "\
+            pbga (66)
+            xhth (57)
+            ebii (61)
+            havc (66)
+            ktlj (57)
+            fwft (72) -> ktlj, cntj, xhth
+            qoyq (66)
+            padx (45) -> pbga, havc, qoyq
+            tknk (41) -> ugml, padx, fwft
+            jptl (61)
+            ugml (68) -> gyxo, ebii, jptl
+            gyxo (61)
+            cntj (57)";
+
+        let tree = ProgramTree::build_tree(input);
+        let needed_weight = tree.find_branch_weight(&tree.root).unwrap_err();
+
+        assert_eq!(60, needed_weight);
     }
 }
